@@ -694,6 +694,14 @@
         return `${safe}_${simpleHash(imageUrl)}.jpg`;
       }
 
+      // Google Drive (MPC Fill) blocks direct CORS fetch — route through proxy.
+      // Scryfall images support CORS natively.
+      function fetchableUrl(item) {
+        return item.source === 'mpcfill'
+          ? CORS_PROXY + encodeURIComponent(item.imageUrl)
+          : item.imageUrl;
+      }
+
       // ── Preview Panel ──────────────────────────────────────────
 
       function showPreview(item, cardEl) {
@@ -704,6 +712,7 @@
         state.previewCardEl = cardEl;
 
         // Use higher-res URL for preview if available (MPC Fill provides both)
+        previewImg.crossOrigin = item.source === 'scryfall' ? 'anonymous' : '';
         previewImg.src = item.previewUrl || item.imageUrl;
         previewImg.alt = item.name;
         previewName.textContent  = item.name;
@@ -871,7 +880,7 @@
         img.src         = item.imageUrl;
         img.alt         = item.name;
         img.loading     = 'lazy';
-        img.crossOrigin = 'anonymous';
+        img.crossOrigin = item.source === 'scryfall' ? 'anonymous' : '';
 
         const isMpc     = item.source === 'mpcfill';
         const badge     = document.createElement('span');
@@ -926,7 +935,7 @@
         const img       = document.createElement('img');
         img.src         = item.imageUrl;
         img.alt         = item.name;
-        img.crossOrigin = item.source !== 'local' ? 'anonymous' : '';
+        img.crossOrigin = item.source === 'scryfall' ? 'anonymous' : '';
 
         const overlay       = document.createElement('div');
         overlay.className   = 'remove-overlay';
@@ -975,11 +984,12 @@
 
       async function saveImageLocally(item) {
         if (item.source === 'local') return;
-        const filename = makeFilename(item.name, item.imageUrl);
+        const filename  = makeFilename(item.name, item.imageUrl);
+        const fetchUrl  = fetchableUrl(item);
 
         if (state.dirHandle) {
           try {
-            const res    = await fetch(item.imageUrl);
+            const res    = await fetch(fetchUrl);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const blob   = await res.blob();
             const fh     = await state.dirHandle.getFileHandle(filename, { create: true });
@@ -994,7 +1004,7 @@
         }
 
         try {
-          const res    = await fetch(item.imageUrl);
+          const res    = await fetch(fetchUrl);
           const blob   = await res.blob();
           const objUrl = URL.createObjectURL(blob);
           const a      = Object.assign(document.createElement('a'), { href: objUrl, download: filename });
@@ -1099,7 +1109,7 @@
         if (item.source === 'local') return;
         const filename = makeFilename(item.name, item.imageUrl);
         try {
-          const res    = await fetch(item.imageUrl);
+          const res    = await fetch(fetchableUrl(item));
           const blob   = await res.blob();
           const objUrl = URL.createObjectURL(blob);
           const a      = Object.assign(document.createElement('a'), { href: objUrl, download: filename });
@@ -1143,8 +1153,25 @@
 
       // ── PDF Generation ──────────────────────────────────────────
 
-      function loadImageAsDataUrl(url) {
-        if (url.startsWith('data:')) return Promise.resolve(url);
+      // For Scryfall: canvas + crossOrigin (native CORS support).
+      // For MPC Fill: fetch through CORS proxy → blob → FileReader
+      //   (Google Drive blocks crossOrigin canvas reads).
+      async function loadImageAsDataUrl(item) {
+        const { imageUrl, source } = item;
+        if (source === 'local' || imageUrl.startsWith('data:')) return imageUrl;
+
+        if (source === 'mpcfill') {
+          const res  = await fetch(CORS_PROXY + encodeURIComponent(imageUrl));
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload  = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        }
+
         return new Promise((resolve, reject) => {
           const img       = new Image();
           img.crossOrigin = 'anonymous';
@@ -1158,8 +1185,8 @@
             ctx.drawImage(img, 0, 0);
             resolve(canvas.toDataURL('image/jpeg', 0.92));
           };
-          img.onerror = () => reject(new Error(`Image load failed: ${url}`));
-          img.src     = url;
+          img.onerror = () => reject(new Error(`Image load failed: ${imageUrl}`));
+          img.src     = imageUrl;
         });
       }
 
@@ -1176,7 +1203,7 @@
 
           const dataUrls = await Promise.all(
             state.sheet.map(item =>
-              item ? loadImageAsDataUrl(item.imageUrl).catch(() => null) : Promise.resolve(null)
+              item ? loadImageAsDataUrl(item).catch(() => null) : Promise.resolve(null)
             )
           );
 
