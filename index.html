@@ -800,7 +800,21 @@
 
       // ── MPC Fill API ───────────────────────────────────────────
 
+      let mpcSourcesCache = null;
+
+      async function fetchMpcSources() {
+        if (mpcSourcesCache !== null) return mpcSourcesCache;
+        const proxied = CORS_PROXY + encodeURIComponent('https://mpcfill.com/2/sources/');
+        const res = await fetch(proxied);
+        if (!res.ok) throw new Error(`Sources fetch failed: HTTP ${res.status}`);
+        const data = await res.json();
+        // results keyed by pk string: { "1": {pk, name, ...}, "2": {...}, ... }
+        mpcSourcesCache = Object.values(data.results || {}).map(s => [s.pk, true]);
+        return mpcSourcesCache;
+      }
+
       async function searchMpcFill(query) {
+        const sources = await fetchMpcSources();
         const proxied = CORS_PROXY + encodeURIComponent(MPC_SEARCH);
         const res = await fetch(proxied, {
           method: 'POST',
@@ -809,9 +823,23 @@
             query,
             cardTypes: ['CARD'],
             pageStart: 0,
-            pageSize: 50,
+            pageSize: 60,
             sortBy: 'nameAscending',
-            searchSettings: {},
+            searchSettings: {
+              filterSettings: {
+                minimumDPI: 0,
+                maximumDPI: 1500,
+                maximumSize: 30,
+                languages: [],
+                includesTags: [],
+                excludesTags: ['NSFW'],
+              },
+              searchTypeSettings: {
+                fuzzySearch: false,
+                filterCardbacks: false,
+              },
+              sourceSettings: { sources },
+            },
           }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
