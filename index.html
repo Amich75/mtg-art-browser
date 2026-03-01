@@ -8,7 +8,7 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    :root { --top-height: 50vh; }
+    :root { --top-height: 84vh; }
 
     body {
       height: 100vh;
@@ -107,29 +107,14 @@
     #search-btn:hover:not(:disabled) { background: #6d28d9; }
     #search-btn:disabled { background: #4b5563; cursor: not-allowed; }
 
-    #batch-toggle-btn {
-      padding: 7px 12px;
-      background: transparent;
-      color: #6b7280;
-      border: 1px solid #374151;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.15s;
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-    #batch-toggle-btn:hover      { color: #e5e7eb; border-color: #6b7280; }
-    #batch-toggle-btn.batch-open { color: #fcd34d; border-color: #92400e; background: rgba(245,158,11,.1); }
-
     /* ── BATCH PANEL ── */
-    #batch-panel { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; animation: slideDown .15s ease; }
+    #batch-panel { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+    #batch-label { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: .06em; }
     #batch-panel[hidden] { display: none; }
     @keyframes slideDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; } }
 
     #batch-input {
-      width: 100%; height: 68px; resize: vertical; min-height: 44px; max-height: 130px;
+      width: 100%; height: 102px; resize: vertical; min-height: 44px; max-height: 200px;
       padding: 7px 10px;
       background: #1f2937; border: 1px solid #374151; border-radius: 6px;
       color: #f3f4f6; font-size: 12px; font-family: inherit; line-height: 1.5;
@@ -172,7 +157,7 @@
 
     /* ── ART GRID PANE (left) ── */
     #art-grid-pane {
-      flex: 0 0 49%;
+      flex: 0 0 80%;
       min-width: 180px;
       display: flex;
       flex-direction: column;
@@ -354,6 +339,20 @@
     }
     #preview-download-btn:hover { color: #e5e7eb; border-color: #6b7280; }
 
+    #grid-clear-btn {
+      padding: 2px 8px;
+      background: transparent;
+      color: #6b7280;
+      border: 1px solid #374151;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: color .15s, border-color .15s;
+    }
+    #grid-clear-btn:hover { color: #f87171; border-color: #f87171; }
+
     #preview-open-link {
       font-size: 11px;
       color: #6b7280;
@@ -392,7 +391,7 @@
     /* ── BOTTOM PANEL ── */
     #bottom-panel {
       flex: 1;
-      min-height: 120px;
+      min-height: 44px;
       display: flex;
       flex-direction: column;
       padding: 8px 12px;
@@ -446,12 +445,17 @@
       flex: 1;
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      grid-template-rows: repeat(3, 1fr);
       gap: 6px;
-      overflow: hidden;
+      overflow-y: auto;
+      align-content: start;
+      padding-bottom: 6px;
     }
+    #sheet-grid::-webkit-scrollbar       { width: 4px; }
+    #sheet-grid::-webkit-scrollbar-track { background: #1f2937; }
+    #sheet-grid::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
 
     .sheet-slot {
+      aspect-ratio: 5 / 7;
       border: 2px dashed #374151; border-radius: 8px; background: #0f172a;
       display: flex; align-items: center; justify-content: center;
       overflow: hidden; position: relative; transition: border-color .15s, background .15s;
@@ -494,15 +498,15 @@
         <input id="search-input" class="search-input" type="text"
                placeholder="Card name (e.g. Lightning Bolt)…" autocomplete="off">
         <button id="search-btn">Search</button>
-        <button id="batch-toggle-btn" title="Paste a list of card names to batch-search">📋 Batch</button>
       </div>
     </div>
 
-    <div id="batch-panel" hidden>
+    <div id="batch-panel">
+      <span id="batch-label">Paste List</span>
       <textarea id="batch-input"
                 placeholder="Plain names or Moxfield export format:&#10;Lightning Bolt&#10;1 Black Lotus (LEA) 232&#10;1 Counterspell (2ED) 61 *F*"></textarea>
       <div id="batch-controls">
-        <button id="batch-search-btn">Search All on Scryfall</button>
+        <button id="batch-search-btn">Search All</button>
         <span id="batch-progress"></span>
         <button id="batch-cancel-btn" hidden>Cancel</button>
       </div>
@@ -522,6 +526,7 @@
         <div class="pane-header">
           <span class="source-badge mpc-badge">MPC</span>
           <span class="pane-status" id="mpc-status">Toggle MPC Fill above to search</span>
+          <button id="grid-clear-btn">✕ Clear</button>
         </div>
         <div id="art-grid"></div>
       </div>
@@ -561,7 +566,7 @@
       <span id="sheet-title">Print Sheet — drag local images onto slots</span>
       <div id="sheet-controls">
         <button id="folder-btn" title="Set local save folder">📁 Set folder</button>
-        <span id="slot-count">0 / 9 filled</span>
+        <span id="slot-count">0 cards</span>
         <button id="clear-sheet-btn">Clear</button>
         <button id="generate-pdf-btn" disabled>Generate PDF</button>
       </div>
@@ -580,7 +585,7 @@
 
       // ── State ──────────────────────────────────────────────────
       const state = {
-        sheet:            new Array(9).fill(null),
+        sheet:            [],
         dirHandle:        null,
         sources:          { scryfall: true, mpcfill: true },
         isSearching:      false,
@@ -593,7 +598,6 @@
       // ── DOM References ─────────────────────────────────────────
       const searchInput     = document.getElementById('search-input');
       const searchBtn       = document.getElementById('search-btn');
-      const batchToggleBtn  = document.getElementById('batch-toggle-btn');
       const batchPanel      = document.getElementById('batch-panel');
       const batchInput      = document.getElementById('batch-input');
       const batchSearchBtn  = document.getElementById('batch-search-btn');
@@ -624,17 +628,6 @@
       // Source toggle buttons
       const sourceToggleBtns = document.querySelectorAll('.source-toggle');
 
-      // ── Pre-render 9 Sheet Slots ────────────────────────────────
-      const sheetSlots = [];
-      for (let i = 0; i < 9; i++) {
-        const slot = document.createElement('div');
-        slot.className = 'sheet-slot empty';
-        slot.dataset.slotNumber = i + 1;
-        sheetGrid.appendChild(slot);
-        sheetSlots.push(slot);
-        setupSlotDragDrop(slot, i);
-      }
-
       // ── Source Toggles ─────────────────────────────────────────
       sourceToggleBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -645,7 +638,7 @@
       });
 
       // ── Resize Handle ──────────────────────────────────────────
-      const MIN_H = 120;
+      const MIN_H = 44;
       let resizing = false;
 
       resizeHandle.addEventListener('mousedown', e => {
@@ -753,7 +746,7 @@
 
       // ── Drag & Drop onto Sheet Slots ───────────────────────────
 
-      function setupSlotDragDrop(slot, index) {
+      function setupEmptySlotDrop(slot) {
         slot.addEventListener('dragenter', e => { e.preventDefault(); slot.classList.add('drag-over'); });
         slot.addEventListener('dragover',  e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
         slot.addEventListener('dragleave', e => { if (!slot.contains(e.relatedTarget)) slot.classList.remove('drag-over'); });
@@ -764,9 +757,9 @@
           if (!file || !file.type.startsWith('image/')) { showStatus('Drop an image file onto a slot.', 'error'); return; }
           const reader = new FileReader();
           reader.onload = ev => {
-            state.sheet[index] = { imageUrl: ev.target.result, name: file.name.replace(/\.[^.]+$/, ''), label: `Local: ${file.name}`, source: 'local' };
+            state.sheet.push({ imageUrl: ev.target.result, name: file.name.replace(/\.[^.]+$/, ''), label: `Local: ${file.name}`, source: 'local' });
             renderSheet();
-            showStatus(`Slot ${index + 1}: loaded "${file.name}"`, 'info');
+            showStatus(`Loaded "${file.name}"`, 'info');
           };
           reader.readAsDataURL(file);
         });
@@ -914,40 +907,40 @@
       }
 
       function renderSheet() {
-        const filled = state.sheet.filter(Boolean).length;
-        slotCountEl.textContent = `${filled} / 9 filled`;
-        generatePdfBtn.disabled = filled === 0;
-        state.sheet.forEach((item, i) => renderSlot(i, item));
-      }
+        const count = state.sheet.length;
+        slotCountEl.textContent = `${count} card${count !== 1 ? 's' : ''}`;
+        generatePdfBtn.disabled = count === 0;
 
-      function renderSlot(index, item) {
-        const slot = sheetSlots[index];
-        slot.innerHTML = '';
-        slot.onclick   = null;
+        sheetGrid.innerHTML = '';
 
-        if (!item) {
-          slot.className          = 'sheet-slot empty';
-          slot.dataset.slotNumber = index + 1;
-          slot.title              = '';
-          return;
+        state.sheet.forEach((item, i) => {
+          const slot = document.createElement('div');
+          slot.className = 'sheet-slot filled';
+          slot.title = `${item.name}\n${item.label}\nClick to remove`;
+
+          const img = document.createElement('img');
+          img.src = item.imageUrl;
+          img.alt = item.name;
+          if (item.source === 'scryfall') img.crossOrigin = 'anonymous';
+
+          const overlay = document.createElement('div');
+          overlay.className = 'remove-overlay';
+          overlay.textContent = '✕ Remove';
+
+          slot.appendChild(img);
+          slot.appendChild(overlay);
+          slot.onclick = () => { state.sheet.splice(i, 1); renderSheet(); };
+          sheetGrid.appendChild(slot);
+        });
+
+        // Always show 3 trailing empty drop targets
+        for (let j = 0; j < 3; j++) {
+          const slot = document.createElement('div');
+          slot.className = 'sheet-slot empty';
+          slot.dataset.slotNumber = count + j + 1;
+          setupEmptySlotDrop(slot);
+          sheetGrid.appendChild(slot);
         }
-
-        slot.className = 'sheet-slot filled';
-        slot.removeAttribute('data-slot-number');
-        slot.title = `${item.name}\n${item.label}\nClick to remove`;
-
-        const img       = document.createElement('img');
-        img.src         = item.imageUrl;
-        img.alt         = item.name;
-        if (item.source === 'scryfall') img.crossOrigin = 'anonymous';
-
-        const overlay       = document.createElement('div');
-        overlay.className   = 'remove-overlay';
-        overlay.textContent = '✕ Remove';
-
-        slot.appendChild(img);
-        slot.appendChild(overlay);
-        slot.onclick = () => handleSlotClick(index);
       }
 
       // ── File System Saving ─────────────────────────────────────
@@ -969,6 +962,7 @@
       }
 
       updateFolderBtn();
+      renderSheet();
 
       async function pickFolder() {
         if (!SUPPORTS_DIR_PICKER) {
@@ -1061,13 +1055,6 @@
 
       // ── Batch Search ───────────────────────────────────────────
 
-      function handleBatchToggle() {
-        const isOpen = !batchPanel.hidden;
-        batchPanel.hidden = isOpen;
-        batchToggleBtn.classList.toggle('batch-open', !isOpen);
-        if (!isOpen) batchInput.focus();
-      }
-
       async function handleBatchSearch() {
         const lines = batchInput.value.split('\n')
           .map(l => {
@@ -1085,20 +1072,22 @@
         state.isBatchSearching  = true;
         batchSearchBtn.disabled = true;
         batchCancelBtn.hidden   = false;
-        clearSourceFromGrid('scryfall');
-        setPaneStatus(scryfallStatus, `Batch: 0 / ${lines.length}…`, 'loading');
 
-        let found = 0;
+        const doScryfall = state.sources.scryfall;
+        const doMpc      = state.sources.mpcfill;
+        if (doScryfall) { clearSourceFromGrid('scryfall'); setPaneStatus(scryfallStatus, `Batch: 0 / ${lines.length}…`, 'loading'); }
+        if (doMpc)      { clearSourceFromGrid('mpcfill');  setPaneStatus(mpcStatus,      `Batch: 0 / ${lines.length}…`, 'loading'); }
+
+        let foundSC = 0, foundMPC = 0;
         for (let i = 0; i < lines.length; i++) {
           if (state.batchCancelled) break;
           const name = lines[i];
           batchProgress.textContent = `${i + 1} / ${lines.length}: ${name}`;
-          try {
-            const items = await searchScryfall(name);
-            if (items.length) { appendToGrid(items); found += items.length; }
-          } catch (err) {
-            console.warn(`Skipping "${name}":`, err.message);
-          }
+
+          const tasks = [];
+          if (doScryfall) tasks.push(searchScryfall(name).then(items => { if (items.length) { appendToGrid(items); foundSC += items.length; } }).catch(err => console.warn(`SC skip "${name}":`, err.message)));
+          if (doMpc)      tasks.push(searchMpcFill(name) .then(items => { if (items.length) { appendToGrid(items); foundMPC += items.length; } }).catch(err => console.warn(`MPC skip "${name}":`, err.message)));
+          await Promise.all(tasks);
         }
 
         const cancelled         = state.batchCancelled;
@@ -1106,15 +1095,22 @@
         batchSearchBtn.disabled = false;
         batchCancelBtn.hidden   = true;
         batchProgress.textContent = '';
-        setPaneStatus(scryfallStatus,
-          cancelled
-            ? 'Batch cancelled.'
-            : `Batch done — ${found} artwork${found !== 1 ? 's' : ''} from ${lines.length} card${lines.length !== 1 ? 's' : ''}`,
-          'info'
-        );
+        if (doScryfall) setPaneStatus(scryfallStatus,
+          cancelled ? 'Batch cancelled.' : `Batch done — ${foundSC} artwork${foundSC !== 1 ? 's' : ''} from ${lines.length} card${lines.length !== 1 ? 's' : ''}`,
+          'info');
+        if (doMpc) setPaneStatus(mpcStatus,
+          cancelled ? 'Batch cancelled.' : `Batch done — ${foundMPC} artwork${foundMPC !== 1 ? 's' : ''} from ${lines.length} card${lines.length !== 1 ? 's' : ''}`,
+          'info');
       }
 
       // ── Preview Actions ─────────────────────────────────────────
+
+      document.getElementById('grid-clear-btn').addEventListener('click', () => {
+        artGrid.innerHTML = '';
+        clearPreview();
+        setPaneStatus(scryfallStatus, 'Toggle Scryfall above to search');
+        setPaneStatus(mpcStatus,      'Toggle MPC Fill above to search');
+      });
 
       previewDownloadBtn.addEventListener('click', async () => {
         if (!state.previewItem) return;
@@ -1138,14 +1134,9 @@
 
       previewAddBtn.addEventListener('click', () => {
         if (!state.previewItem) return;
-        const firstEmpty = state.sheet.indexOf(null);
-        if (firstEmpty === -1) {
-          showStatus('Sheet is full (9/9). Click a slot to remove it first.', 'error');
-          return;
-        }
         const item   = state.previewItem;
         const cardEl = state.previewCardEl;
-        state.sheet[firstEmpty] = item;
+        state.sheet.push(item);
         cardEl?.remove();
         clearPreview();
         renderSheet();
@@ -1154,13 +1145,8 @@
 
       // ── Slot / Sheet Handlers ──────────────────────────────────
 
-      function handleSlotClick(index) {
-        state.sheet[index] = null;
-        renderSheet();
-      }
-
       function handleClearSheet() {
-        state.sheet.fill(null);
+        state.sheet = [];
         renderSheet();
       }
 
@@ -1214,36 +1200,35 @@
           const cell_w = (PAGE_W - 2 * MARGIN - 2 * GAP) / 3;
           const cell_h = (PAGE_H - 2 * MARGIN - 2 * GAP) / 3;
 
-          const dataUrls = await Promise.all(
-            state.sheet.map(item =>
-              item ? loadImageAsDataUrl(item).catch(() => null) : Promise.resolve(null)
-            )
-          );
-
-          for (let i = 0; i < 9; i++) {
-            const col    = i % 3, row = Math.floor(i / 3);
-            const cell_x = MARGIN + col * (cell_w + GAP);
-            const cell_y = MARGIN + row * (cell_h + GAP);
-
-            if (!dataUrls[i]) {
-              doc.setDrawColor(180, 180, 180); doc.setLineWidth(0.3);
-              doc.rect(cell_x, cell_y, cell_w, cell_h);
-              doc.setFontSize(10); doc.setTextColor(180, 180, 180);
-              doc.text(String(i + 1), cell_x + cell_w / 2, cell_y + cell_h / 2, { align: 'center' });
-              continue;
+          // Split cards into pages of 9
+          for (let p = 0; p * 9 < state.sheet.length; p++) {
+            if (p > 0) doc.addPage();
+            const pageItems = state.sheet.slice(p * 9, p * 9 + 9);
+            const dataUrls  = await Promise.all(
+              pageItems.map(item => loadImageAsDataUrl(item).catch(() => null))
+            );
+            for (let i = 0; i < 9; i++) {
+              const col    = i % 3, row = Math.floor(i / 3);
+              const cell_x = MARGIN + col * (cell_w + GAP);
+              const cell_y = MARGIN + row * (cell_h + GAP);
+              if (i >= pageItems.length) break; // last page may have fewer than 9
+              if (!dataUrls[i]) {
+                doc.setDrawColor(180, 180, 180); doc.setLineWidth(0.3);
+                doc.rect(cell_x, cell_y, cell_w, cell_h);
+                continue;
+              }
+              let img_w = cell_w, img_h = cell_w / CARD_RATIO;
+              if (img_h > cell_h) { img_h = cell_h; img_w = cell_h * CARD_RATIO; }
+              doc.addImage(dataUrls[i], 'JPEG',
+                cell_x + (cell_w - img_w) / 2, cell_y + (cell_h - img_h) / 2, img_w, img_h);
             }
-
-            let img_w = cell_w, img_h = cell_w / CARD_RATIO;
-            if (img_h > cell_h) { img_h = cell_h; img_w = cell_h * CARD_RATIO; }
-            doc.addImage(dataUrls[i], 'JPEG',
-              cell_x + (cell_w - img_w) / 2, cell_y + (cell_h - img_h) / 2, img_w, img_h);
           }
 
           doc.save('mtg-card-sheet.pdf');
         } catch (err) {
           alert(`PDF generation failed: ${err.message}`);
         } finally {
-          generatePdfBtn.disabled    = state.sheet.filter(Boolean).length === 0;
+          generatePdfBtn.disabled    = state.sheet.length === 0;
           generatePdfBtn.textContent = 'Generate PDF';
         }
       }
@@ -1253,7 +1238,6 @@
       searchBtn.addEventListener('click', handleSearch);
       searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleSearch(); });
 
-      batchToggleBtn.addEventListener('click', handleBatchToggle);
       batchSearchBtn.addEventListener('click', handleBatchSearch);
       batchCancelBtn.addEventListener('click', () => { state.batchCancelled = true; });
 
