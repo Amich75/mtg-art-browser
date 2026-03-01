@@ -500,7 +500,7 @@
 
     <div id="batch-panel" hidden>
       <textarea id="batch-input"
-                placeholder="One card name per line:&#10;Lightning Bolt&#10;Black Lotus&#10;Counterspell"></textarea>
+                placeholder="Plain names or Moxfield export format:&#10;Lightning Bolt&#10;1 Black Lotus (LEA) 232&#10;1 Counterspell (2ED) 61 *F*"></textarea>
       <div id="batch-controls">
         <button id="batch-search-btn">Search All on Scryfall</button>
         <span id="batch-progress"></span>
@@ -1069,7 +1069,16 @@
       }
 
       async function handleBatchSearch() {
-        const lines = batchInput.value.split('\n').map(l => l.trim()).filter(Boolean);
+        const lines = batchInput.value.split('\n')
+          .map(l => {
+            let s = l.trim();
+            // Strip leading quantity (e.g. "1 ", "12 ")
+            s = s.replace(/^\d+\s+/, '');
+            // Strip set code and everything after (e.g. " (TLE) 74 *F*")
+            s = s.replace(/\s*\(.*$/, '');
+            return s.trim();
+          })
+          .filter(Boolean);
         if (!lines.length) return;
 
         state.batchCancelled    = false;
