@@ -32,7 +32,7 @@
       letter-spacing: 0.03em;
     }
     .scryfall-badge { background: rgba(124,58,237,.15); color: #a78bfa; border: 1px solid rgba(124,58,237,.35); }
-    .da-badge       { background: rgba(5,150,105,.15);  color: #6ee7b7; border: 1px solid rgba(5,150,105,.35); }
+    .mpc-badge      { background: rgba(245,158,11,.15);  color: #fcd34d; border: 1px solid rgba(245,158,11,.35); }
 
     /* ── TOP PANEL ── */
     #top-panel {
@@ -45,7 +45,7 @@
       overflow: hidden;
     }
 
-    #search-bars { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+    #search-bars { flex-shrink: 0; }
 
     .search-row { display: flex; gap: 8px; align-items: center; }
 
@@ -64,8 +64,36 @@
     .search-input:focus { border-color: #7c3aed; }
     .search-input::placeholder { color: #6b7280; }
 
-    .search-btn {
-      padding: 7px 14px;
+    /* ── SOURCE TOGGLE BUTTONS ── */
+    .source-toggle {
+      padding: 7px 12px;
+      background: transparent;
+      color: #6b7280;
+      border: 1px solid #374151;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .source-toggle:hover { color: #d1d5db; border-color: #6b7280; }
+    .source-toggle[data-source="scryfall"].active {
+      color: #a78bfa;
+      border-color: rgba(124,58,237,.5);
+      background: rgba(124,58,237,.12);
+    }
+    .source-toggle[data-source="mpcfill"].active {
+      color: #fcd34d;
+      border-color: rgba(245,158,11,.5);
+      background: rgba(245,158,11,.12);
+    }
+
+    /* ── SEARCH BUTTON ── */
+    #search-btn {
+      padding: 7px 16px;
+      background: #7c3aed;
       color: white;
       border: none;
       border-radius: 6px;
@@ -76,11 +104,8 @@
       white-space: nowrap;
       flex-shrink: 0;
     }
-    .search-btn:disabled { background: #4b5563 !important; cursor: not-allowed; }
-    #scryfall-btn { background: #7c3aed; }
-    #scryfall-btn:hover:not(:disabled) { background: #6d28d9; }
-    #da-btn { background: #059669; }
-    #da-btn:hover:not(:disabled) { background: #047857; }
+    #search-btn:hover:not(:disabled) { background: #6d28d9; }
+    #search-btn:disabled { background: #4b5563; cursor: not-allowed; }
 
     #batch-toggle-btn {
       padding: 7px 12px;
@@ -464,17 +489,12 @@
   <div id="top-panel">
     <div id="search-bars">
       <div class="search-row">
-        <span class="source-badge scryfall-badge">Scryfall</span>
-        <input id="scryfall-input" class="search-input" type="text"
+        <button class="source-toggle active" data-source="scryfall">Scryfall</button>
+        <button class="source-toggle active" data-source="mpcfill">MPC Fill</button>
+        <input id="search-input" class="search-input" type="text"
                placeholder="Card name (e.g. Lightning Bolt)…" autocomplete="off">
-        <button id="scryfall-btn" class="search-btn">Search</button>
+        <button id="search-btn">Search</button>
         <button id="batch-toggle-btn" title="Paste a list of card names to batch-search">📋 Batch</button>
-      </div>
-      <div class="search-row">
-        <span class="source-badge da-badge">DeviantArt</span>
-        <input id="da-input" class="search-input" type="text"
-               placeholder="Search artwork (e.g. lightning bolt)…" autocomplete="off">
-        <button id="da-btn" class="search-btn">Search</button>
       </div>
     </div>
 
@@ -493,15 +513,15 @@
     <!-- Left: thumbnail grid | Right: large preview -->
     <div id="results-container">
 
-      <!-- Left: all results (Scryfall + DeviantArt combined) -->
+      <!-- Left: all results (combined) -->
       <div id="art-grid-pane">
         <div class="pane-header">
           <span class="source-badge scryfall-badge">SC</span>
-          <span class="pane-status" id="scryfall-status">Enter a card name above</span>
+          <span class="pane-status" id="scryfall-status">Toggle Scryfall above to search</span>
         </div>
         <div class="pane-header">
-          <span class="source-badge da-badge">DA</span>
-          <span class="pane-status" id="da-status">Enter a search above</span>
+          <span class="source-badge mpc-badge">MPC</span>
+          <span class="pane-status" id="mpc-status">Toggle MPC Fill above to search</span>
         </div>
         <div id="art-grid"></div>
       </div>
@@ -554,7 +574,7 @@
 
       // ── Constants ──────────────────────────────────────────────
       const SCRYFALL_SEARCH = 'https://api.scryfall.com/cards/search';
-      const DA_RSS          = 'https://backend.deviantart.com/rss.xml';
+      const MPC_SEARCH      = 'https://mpcfill.com/2/exploreSearch/';
       const CORS_PROXY      = 'https://corsproxy.io/?url=';
       const SUPPORTS_DIR_PICKER = 'showDirectoryPicker' in window;
 
@@ -562,19 +582,17 @@
       const state = {
         sheet:            new Array(9).fill(null),
         dirHandle:        null,
-        isScSearching:    false,
-        isDaSearching:    false,
+        sources:          { scryfall: true, mpcfill: true },
+        isSearching:      false,
         isBatchSearching: false,
         batchCancelled:   false,
-        previewItem:      null,   // currently previewed artwork item
-        previewCardEl:    null,   // the thumbnail DOM element in the grid
+        previewItem:      null,
+        previewCardEl:    null,
       };
 
       // ── DOM References ─────────────────────────────────────────
-      const scryfallInput   = document.getElementById('scryfall-input');
-      const scryfallBtn     = document.getElementById('scryfall-btn');
-      const daInput         = document.getElementById('da-input');
-      const daBtn           = document.getElementById('da-btn');
+      const searchInput     = document.getElementById('search-input');
+      const searchBtn       = document.getElementById('search-btn');
       const batchToggleBtn  = document.getElementById('batch-toggle-btn');
       const batchPanel      = document.getElementById('batch-panel');
       const batchInput      = document.getElementById('batch-input');
@@ -583,7 +601,7 @@
       const batchProgress   = document.getElementById('batch-progress');
       const artGrid         = document.getElementById('art-grid');
       const scryfallStatus  = document.getElementById('scryfall-status');
-      const daStatus        = document.getElementById('da-status');
+      const mpcStatus       = document.getElementById('mpc-status');
       const generalStatus   = document.getElementById('general-status');
       const sheetGrid       = document.getElementById('sheet-grid');
       const slotCountEl     = document.getElementById('slot-count');
@@ -593,15 +611,18 @@
       const resizeHandle    = document.getElementById('resize-handle');
 
       // Preview pane refs
-      const previewEmpty    = document.getElementById('preview-empty');
-      const previewContent  = document.getElementById('preview-content');
-      const previewImg      = document.getElementById('preview-img');
-      const previewName     = document.getElementById('preview-name');
-      const previewLabel    = document.getElementById('preview-label');
-      const previewBadge    = document.getElementById('preview-badge');
+      const previewEmpty       = document.getElementById('preview-empty');
+      const previewContent     = document.getElementById('preview-content');
+      const previewImg         = document.getElementById('preview-img');
+      const previewName        = document.getElementById('preview-name');
+      const previewLabel       = document.getElementById('preview-label');
+      const previewBadge       = document.getElementById('preview-badge');
       const previewAddBtn      = document.getElementById('preview-add-btn');
       const previewDownloadBtn = document.getElementById('preview-download-btn');
       const previewOpenLink    = document.getElementById('preview-open-link');
+
+      // Source toggle buttons
+      const sourceToggleBtns = document.querySelectorAll('.source-toggle');
 
       // ── Pre-render 9 Sheet Slots ────────────────────────────────
       const sheetSlots = [];
@@ -613,6 +634,15 @@
         sheetSlots.push(slot);
         setupSlotDragDrop(slot, i);
       }
+
+      // ── Source Toggles ─────────────────────────────────────────
+      sourceToggleBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const src = btn.dataset.source;
+          state.sources[src] = !state.sources[src];
+          btn.classList.toggle('active', state.sources[src]);
+        });
+      });
 
       // ── Resize Handle ──────────────────────────────────────────
       const MIN_H = 120;
@@ -667,20 +697,25 @@
       // ── Preview Panel ──────────────────────────────────────────
 
       function showPreview(item, cardEl) {
-        // Deselect previous
         artGrid.querySelectorAll('.result-card.selected').forEach(el => el.classList.remove('selected'));
         cardEl.classList.add('selected');
 
         state.previewItem   = item;
         state.previewCardEl = cardEl;
 
-        previewImg.src = item.imageUrl;
+        // Use higher-res URL for preview if available (MPC Fill provides both)
+        previewImg.src = item.previewUrl || item.imageUrl;
         previewImg.alt = item.name;
-        previewName.textContent = item.name;
+        previewName.textContent  = item.name;
         previewLabel.textContent = item.label || '';
 
-        previewBadge.textContent = item.source === 'scryfall' ? 'Scryfall' : 'DeviantArt';
-        previewBadge.className   = `source-badge ${item.source === 'scryfall' ? 'scryfall-badge' : 'da-badge'}`;
+        if (item.source === 'scryfall') {
+          previewBadge.textContent = 'Scryfall';
+          previewBadge.className   = 'source-badge scryfall-badge';
+        } else {
+          previewBadge.textContent = 'MPC Fill';
+          previewBadge.className   = 'source-badge mpc-badge';
+        }
 
         if (item.pageUrl) {
           previewOpenLink.href = item.pageUrl;
@@ -737,20 +772,17 @@
 
       async function searchScryfall(query) {
         await new Promise(r => setTimeout(r, 100));
-
         const params = new URLSearchParams({
           q: `!"${query}" include:extras`,
           unique: 'prints',
           order: 'released',
         });
         const res = await fetch(`${SCRYFALL_SEARCH}?${params}`);
-
         if (res.status === 404) return [];
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.details || `HTTP ${res.status}`);
         }
-
         const data     = await res.json();
         const seenUrls = new Set();
         return (data.data || []).flatMap(card => {
@@ -766,51 +798,45 @@
         });
       }
 
-      // ── DeviantArt RSS API ─────────────────────────────────────
+      // ── MPC Fill API ───────────────────────────────────────────
 
-      function parseDeviantArtRss(xmlText, queryName) {
-        const NS_MEDIA = 'http://search.yahoo.com/mrss/';
-        const xml      = new DOMParser().parseFromString(xmlText, 'application/xml');
-        if (xml.querySelector('parsererror')) throw new Error('Could not parse DeviantArt response');
-
-        const results = [];
-        xml.querySelectorAll('item').forEach(item => {
-          const title     = item.querySelector('title')?.textContent?.trim() || '';
-          const guid      = item.querySelector('guid')?.textContent?.trim()  || '';
-          const authorRaw = item.querySelector('author')?.textContent?.trim() || '';
-          const contentEl = item.getElementsByTagNameNS(NS_MEDIA, 'content')[0];
-          const thumbEl   = item.getElementsByTagNameNS(NS_MEDIA, 'thumbnail')[0];
-          const imageUrl  = contentEl?.getAttribute('url') || thumbEl?.getAttribute('url') || '';
-          if (!imageUrl || !title) return;
-          const m      = authorRaw.match(/\((.+?)\)/);
-          const artist = m ? m[1] : authorRaw;
-          results.push({ imageUrl, name: queryName, source: 'deviantart', pageUrl: guid,
-            label: `${title}${artist ? ` • ${artist}` : ''}` });
+      async function searchMpcFill(query) {
+        const proxied = CORS_PROXY + encodeURIComponent(MPC_SEARCH);
+        const res = await fetch(proxied, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query,
+            cardTypes: ['CARD'],
+            pageStart: 0,
+            pageSize: 50,
+            sortBy: 'nameAscending',
+            searchSettings: {},
+          }),
         });
-        return results;
-      }
-
-      async function searchDeviantArt(query) {
-        const rssUrl  = `${DA_RSS}?q=${encodeURIComponent('mtg ' + query)}&type=deviation&limit=24`;
-        const proxied = CORS_PROXY + encodeURIComponent(rssUrl);
-        const res     = await fetch(proxied);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return parseDeviantArtRss(await res.text(), query);
+        const data = await res.json();
+        return (data.cards || [])
+          .map(card => ({
+            imageUrl:   card.smallThumbnailUrl  || card.mediumThumbnailUrl || '',
+            previewUrl: card.mediumThumbnailUrl || card.smallThumbnailUrl  || '',
+            name:       query,
+            source:     'mpcfill',
+            label:      [card.name, card.sourceName].filter(Boolean).join(' • '),
+          }))
+          .filter(item => item.imageUrl);
       }
 
       // ── Rendering ──────────────────────────────────────────────
 
-      // Remove all cards of a given source from the combined grid.
-      // If the currently previewed item is from this source, clear the preview.
       function clearSourceFromGrid(source) {
         if (state.previewItem?.source === source) clearPreview();
         artGrid.querySelectorAll(`.result-card[data-source="${source}"]`).forEach(el => el.remove());
       }
 
-      // Creates a card tile. On click: show large preview on the right.
       function makeResultCard(item) {
         const div = document.createElement('div');
-        div.className = 'result-card';
+        div.className  = 'result-card';
         div.dataset.source = item.source;
 
         const img       = document.createElement('img');
@@ -819,9 +845,10 @@
         img.loading     = 'lazy';
         img.crossOrigin = 'anonymous';
 
-        const badge       = document.createElement('span');
-        badge.className   = `source-badge card-source-badge ${item.source === 'scryfall' ? 'scryfall-badge' : 'da-badge'}`;
-        badge.textContent = item.source === 'scryfall' ? 'SC' : 'DA';
+        const isMpc     = item.source === 'mpcfill';
+        const badge     = document.createElement('span');
+        badge.className = `source-badge card-source-badge ${isMpc ? 'mpc-badge' : 'scryfall-badge'}`;
+        badge.textContent = isMpc ? 'MPC' : 'SC';
 
         const label       = document.createElement('div');
         label.className   = 'card-label';
@@ -830,9 +857,7 @@
         div.appendChild(img);
         div.appendChild(badge);
         div.appendChild(label);
-
         div.addEventListener('click', () => showPreview(item, div));
-
         return div;
       }
 
@@ -843,7 +868,6 @@
         items.forEach(item => artGrid.appendChild(makeResultCard(item)));
       }
 
-      // Appends without clearing — for batch search streaming
       function appendToGrid(items) {
         items.forEach(item => artGrid.appendChild(makeResultCard(item)));
       }
@@ -856,7 +880,7 @@
       }
 
       function renderSlot(index, item) {
-        const slot   = sheetSlots[index];
+        const slot = sheetSlots[index];
         slot.innerHTML = '';
         slot.onclick   = null;
 
@@ -890,7 +914,7 @@
       function updateFolderBtn() {
         if (!SUPPORTS_DIR_PICKER) {
           folderBtn.textContent = '📁 Downloads folder';
-          folderBtn.title = 'Firefox: images save to your configured downloads folder.\nTo change it: Firefox Settings → Downloads.';
+          folderBtn.title = 'Firefox: images save to your configured downloads folder.';
           folderBtn.classList.add('active');
           return;
         }
@@ -907,7 +931,7 @@
 
       async function pickFolder() {
         if (!SUPPORTS_DIR_PICKER) {
-          showStatus('Firefox detected — images will download to your configured downloads folder.', 'info');
+          showStatus('Firefox: images download to your configured downloads folder.', 'info');
           return true;
         }
         try {
@@ -923,7 +947,6 @@
 
       async function saveImageLocally(item) {
         if (item.source === 'local') return;
-
         const filename = makeFilename(item.name, item.imageUrl);
 
         if (state.dirHandle) {
@@ -942,7 +965,6 @@
           }
         }
 
-        // Fallback (Firefox + Chrome without folder set): trigger download
         try {
           const res    = await fetch(item.imageUrl);
           const blob   = await res.blob();
@@ -956,30 +978,43 @@
         }
       }
 
-      // ── Search Handlers ─────────────────────────────────────────
+      // ── Search Handler ──────────────────────────────────────────
 
-      function handleScryfallSearch() {
-        const query = scryfallInput.value.trim();
-        if (!query || state.isScSearching) return;
-        state.isScSearching  = true;
-        scryfallBtn.disabled = true;
-        setPaneStatus(scryfallStatus, 'Searching…', 'loading');
-        searchScryfall(query)
-          .then(items  => renderResults(items, scryfallStatus, 'scryfall'))
-          .catch(err   => setPaneStatus(scryfallStatus, err.message, 'error'))
-          .finally(()  => { state.isScSearching = false; scryfallBtn.disabled = false; });
-      }
+      async function handleSearch() {
+        const query = searchInput.value.trim();
+        if (!query || state.isSearching) return;
 
-      function handleDaSearch() {
-        const query = daInput.value.trim();
-        if (!query || state.isDaSearching) return;
-        state.isDaSearching = true;
-        daBtn.disabled      = true;
-        setPaneStatus(daStatus, 'Searching…', 'loading');
-        searchDeviantArt(query)
-          .then(items  => renderResults(items, daStatus, 'deviantart'))
-          .catch(err   => setPaneStatus(daStatus, err.message, 'error'))
-          .finally(()  => { state.isDaSearching = false; daBtn.disabled = false; });
+        const active = Object.entries(state.sources).filter(([, on]) => on).map(([s]) => s);
+        if (!active.length) { showStatus('Select at least one source (Scryfall or MPC Fill).', 'error'); return; }
+
+        state.isSearching  = true;
+        searchBtn.disabled = true;
+
+        const searches = [];
+
+        if (state.sources.scryfall) {
+          clearSourceFromGrid('scryfall');
+          setPaneStatus(scryfallStatus, 'Searching…', 'loading');
+          searches.push(
+            searchScryfall(query)
+              .then(items => renderResults(items, scryfallStatus, 'scryfall'))
+              .catch(err  => setPaneStatus(scryfallStatus, err.message, 'error'))
+          );
+        }
+
+        if (state.sources.mpcfill) {
+          clearSourceFromGrid('mpcfill');
+          setPaneStatus(mpcStatus, 'Searching…', 'loading');
+          searches.push(
+            searchMpcFill(query)
+              .then(items => renderResults(items, mpcStatus, 'mpcfill'))
+              .catch(err  => setPaneStatus(mpcStatus, err.message, 'error'))
+          );
+        }
+
+        await Promise.all(searches);
+        state.isSearching  = false;
+        searchBtn.disabled = false;
       }
 
       // ── Batch Search ───────────────────────────────────────────
@@ -1028,7 +1063,7 @@
         );
       }
 
-      // ── Preview: Add to Sheet ───────────────────────────────────
+      // ── Preview Actions ─────────────────────────────────────────
 
       previewDownloadBtn.addEventListener('click', async () => {
         if (!state.previewItem) return;
@@ -1059,9 +1094,8 @@
         }
         const item   = state.previewItem;
         const cardEl = state.previewCardEl;
-
         state.sheet[firstEmpty] = item;
-        cardEl?.remove();       // remove thumbnail from grid
+        cardEl?.remove();
         clearPreview();
         renderSheet();
         saveImageLocally(item);
@@ -1109,10 +1143,8 @@
           const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'letter' });
 
           const PAGE_W = 215.9, PAGE_H = 279.4, MARGIN = 10, GAP = 3, CARD_RATIO = 5 / 7;
-          const usable_w = PAGE_W - 2 * MARGIN;
-          const usable_h = PAGE_H - 2 * MARGIN;
-          const cell_w   = (usable_w - 2 * GAP) / 3;
-          const cell_h   = (usable_h - 2 * GAP) / 3;
+          const cell_w = (PAGE_W - 2 * MARGIN - 2 * GAP) / 3;
+          const cell_h = (PAGE_H - 2 * MARGIN - 2 * GAP) / 3;
 
           const dataUrls = await Promise.all(
             state.sheet.map(item =>
@@ -1121,7 +1153,7 @@
           );
 
           for (let i = 0; i < 9; i++) {
-            const col = i % 3, row = Math.floor(i / 3);
+            const col    = i % 3, row = Math.floor(i / 3);
             const cell_x = MARGIN + col * (cell_w + GAP);
             const cell_y = MARGIN + row * (cell_h + GAP);
 
@@ -1150,11 +1182,8 @@
 
       // ── Event Wiring ────────────────────────────────────────────
 
-      scryfallBtn.addEventListener('click', handleScryfallSearch);
-      scryfallInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleScryfallSearch(); });
-
-      daBtn.addEventListener('click', handleDaSearch);
-      daInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleDaSearch(); });
+      searchBtn.addEventListener('click', handleSearch);
+      searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleSearch(); });
 
       batchToggleBtn.addEventListener('click', handleBatchToggle);
       batchSearchBtn.addEventListener('click', handleBatchSearch);
