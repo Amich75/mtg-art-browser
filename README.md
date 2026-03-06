@@ -4,7 +4,7 @@ A single-file, browser-based tool for browsing Magic: The Gathering card artwork
 
 **No backend, no build step, no server required.** Open `index.html` directly in any modern browser.
 
-**Current version: v0.1**
+**Current version: v0.2**
 
 ---
 
@@ -23,14 +23,15 @@ A single-file, browser-based tool for browsing Magic: The Gathering card artwork
 - Progress indicator and Cancel button during search
 
 ### Results (left panel — 80% width)
-- All results from both sources appear in a **combined scrollable thumbnail grid**
+- Results are **grouped by card name** — each card gets its own section with a header, result count, and a per-card **"✕ Clear"** button to remove just that card's results
 - Each card shows its source badge (SC / MPC) and a label on hover
 - **"✕ Clear"** button in the panel header clears all results and resets the preview
-- Click a thumbnail to **preview it large** on the right
+- **Single click** a thumbnail to **preview it large** on the right
+- **Double click** a thumbnail to **add it directly to the print sheet** (skips the preview step)
 
 ### Preview (right panel — 20% width)
 - Selected artwork shown large with card name, label, and source badge
-- **"+ Add to Sheet"** — appends to the print sheet, removes thumbnail from grid, saves locally
+- **"+ Add to PDF / Double Click"** — appends to the print sheet, removes thumbnail from grid, saves locally
 - **"⬇ Download"** — direct browser download (independent of folder picker)
 - **"Open ↗"** link — opens the original source page (where available)
 
@@ -40,6 +41,7 @@ A single-file, browser-based tool for browsing Magic: The Gathering card artwork
 - Drag and drop local image files directly onto any empty slot
 - Click a filled slot to remove it
 - **"📁 Set folder"** — picks a local directory (Chrome/Edge) for auto-saving artworks; Firefox falls back to browser download
+- **PDF counters** — two counters next to the Generate PDF button show total PDF pages and current page occupancy (x/9)
 - **"Generate PDF"** — exports a US Letter PDF with a 3×3 grid per page; generates as many pages as needed
 - **"Clear"** — removes all cards from the sheet
 
@@ -106,7 +108,7 @@ A single-file, browser-based tool for browsing Magic: The Gathering card artwork
 
 ```
 mtg-art-browser/
-├── index.html    ← entire app (HTML + CSS + JS, ~1200 lines)
+├── index.html    ← entire app (HTML + CSS + JS, ~1375 lines)
 └── artworks/     ← local saved images (gitignored)
 ```
 

@@ -189,14 +189,38 @@
     #art-grid {
       flex: 1;
       overflow-y: auto;
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
-      gap: 5px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
       padding: 6px;
     }
     #art-grid::-webkit-scrollbar       { width: 4px; }
     #art-grid::-webkit-scrollbar-track { background: #1f2937; }
     #art-grid::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
+
+    .card-group-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 2px 4px; margin-top: 6px;
+      border-top: 1px solid #374151;
+    }
+    .card-group:first-child .card-group-header { border-top: none; margin-top: 0; }
+    .card-group-name {
+      font-size: 12px; font-weight: 700; color: #d1d5db;
+      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .card-group-count { font-size: 10px; color: #6b7280; }
+    .card-group-clear {
+      padding: 2px 7px; background: transparent; color: #6b7280;
+      border: 1px solid #374151; border-radius: 4px; font-size: 10px;
+      cursor: pointer; flex-shrink: 0; transition: color .15s, border-color .15s;
+    }
+    .card-group-clear:hover { color: #f87171; border-color: #f87171; }
+    .card-group-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+      gap: 5px;
+      padding: 2px 0 4px;
+    }
 
     /* ── RESULT CARDS (thumbnails in grid) ── */
     .result-card {
@@ -416,6 +440,13 @@
 
     #slot-count { font-size: 12px; color: #6b7280; white-space: nowrap; }
 
+    .pdf-counter {
+      font-size: 11px; color: #9ca3af; white-space: nowrap;
+      padding: 3px 8px; background: #1f2937; border-radius: 4px;
+      border: 1px solid #374151;
+    }
+    .pdf-counter strong { color: #e5e7eb; }
+
     #folder-btn {
       padding: 5px 10px; background: transparent; color: #9ca3af;
       border: 1px solid #374151; border-radius: 6px; font-size: 12px;
@@ -546,7 +577,7 @@
             <div id="preview-label"></div>
             <div id="preview-actions">
               <span id="preview-badge" class="source-badge"></span>
-              <button id="preview-add-btn">+ Add to Sheet</button>
+              <button id="preview-add-btn">+ Add to PDF / Double Click</button>
               <button id="preview-download-btn">⬇ Download</button>
               <a id="preview-open-link" href="#" target="_blank" rel="noopener" style="display:none">Open ↗</a>
             </div>
@@ -568,6 +599,8 @@
         <button id="folder-btn" title="Set local save folder">📁 Set folder</button>
         <span id="slot-count">0 cards</span>
         <button id="clear-sheet-btn">Clear</button>
+        <span id="pdf-pages-counter" class="pdf-counter"><strong>0</strong> pages</span>
+        <span id="pdf-slots-counter" class="pdf-counter"><strong>0</strong>/9</span>
         <button id="generate-pdf-btn" disabled>Generate PDF</button>
       </div>
     </div>
@@ -610,6 +643,8 @@
       const sheetGrid       = document.getElementById('sheet-grid');
       const slotCountEl     = document.getElementById('slot-count');
       const generatePdfBtn  = document.getElementById('generate-pdf-btn');
+      const pdfPagesCounter = document.getElementById('pdf-pages-counter');
+      const pdfSlotsCounter = document.getElementById('pdf-slots-counter');
       const clearSheetBtn   = document.getElementById('clear-sheet-btn');
       const folderBtn       = document.getElementById('folder-btn');
       const resizeHandle    = document.getElementById('resize-handle');
@@ -866,6 +901,12 @@
       function clearSourceFromGrid(source) {
         if (state.previewItem?.source === source) clearPreview();
         artGrid.querySelectorAll(`.result-card[data-source="${source}"]`).forEach(el => el.remove());
+        // Remove empty groups
+        artGrid.querySelectorAll('.card-group').forEach(group => {
+          const grid = group.querySelector('.card-group-grid');
+          if (grid && grid.children.length === 0) group.remove();
+          else if (grid) updateGroupCount(group);
+        });
       }
 
       function makeResultCard(item) {
@@ -892,24 +933,97 @@
         div.appendChild(badge);
         div.appendChild(label);
         div.addEventListener('click', () => showPreview(item, div));
+        div.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          state.sheet.push(item);
+          const parentGroup = div.closest('.card-group');
+          div.remove();
+          if (parentGroup) {
+            const grid = parentGroup.querySelector('.card-group-grid');
+            if (grid && grid.children.length === 0) parentGroup.remove();
+            else if (grid) updateGroupCount(parentGroup);
+          }
+          if (state.previewItem === item) clearPreview();
+          renderSheet();
+          saveImageLocally(item);
+        });
         return div;
+      }
+
+      function getOrCreateCardGroup(cardName) {
+        const groupId = `card-group-${cardName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+        let group = artGrid.querySelector(`[data-group-id="${groupId}"]`);
+        if (!group) {
+          group = document.createElement('div');
+          group.className = 'card-group';
+          group.dataset.groupId = groupId;
+          group.dataset.cardName = cardName;
+
+          const header = document.createElement('div');
+          header.className = 'card-group-header';
+
+          const nameEl = document.createElement('span');
+          nameEl.className = 'card-group-name';
+          nameEl.textContent = cardName;
+
+          const countEl = document.createElement('span');
+          countEl.className = 'card-group-count';
+
+          const clearBtn = document.createElement('button');
+          clearBtn.className = 'card-group-clear';
+          clearBtn.textContent = '✕ Clear';
+          clearBtn.addEventListener('click', () => {
+            if (state.previewItem?.name?.toLowerCase() === cardName.toLowerCase()) clearPreview();
+            group.remove();
+          });
+
+          header.appendChild(nameEl);
+          header.appendChild(countEl);
+          header.appendChild(clearBtn);
+
+          const grid = document.createElement('div');
+          grid.className = 'card-group-grid';
+
+          group.appendChild(header);
+          group.appendChild(grid);
+          artGrid.appendChild(group);
+        }
+        return group;
+      }
+
+      function updateGroupCount(group) {
+        const count = group.querySelector('.card-group-grid').children.length;
+        group.querySelector('.card-group-count').textContent = `${count} result${count !== 1 ? 's' : ''}`;
       }
 
       function renderResults(items, statusEl, source) {
         clearSourceFromGrid(source);
         if (items.length === 0) { setPaneStatus(statusEl, 'No results found.'); return; }
         setPaneStatus(statusEl, `${items.length} result${items.length !== 1 ? 's' : ''} — click to preview`, 'info');
-        items.forEach(item => artGrid.appendChild(makeResultCard(item)));
+        items.forEach(item => {
+          const group = getOrCreateCardGroup(item.name);
+          group.querySelector('.card-group-grid').appendChild(makeResultCard(item));
+          updateGroupCount(group);
+        });
       }
 
       function appendToGrid(items) {
-        items.forEach(item => artGrid.appendChild(makeResultCard(item)));
+        items.forEach(item => {
+          const group = getOrCreateCardGroup(item.name);
+          group.querySelector('.card-group-grid').appendChild(makeResultCard(item));
+          updateGroupCount(group);
+        });
       }
 
       function renderSheet() {
         const count = state.sheet.length;
         slotCountEl.textContent = `${count} card${count !== 1 ? 's' : ''}`;
         generatePdfBtn.disabled = count === 0;
+
+        const totalPages = count === 0 ? 0 : Math.ceil(count / 9);
+        const lastPageSlots = count === 0 ? 0 : ((count - 1) % 9) + 1;
+        pdfPagesCounter.innerHTML = `<strong>${totalPages}</strong> page${totalPages !== 1 ? 's' : ''}`;
+        pdfSlotsCounter.innerHTML = `<strong>${lastPageSlots}</strong>/9`;
 
         sheetGrid.innerHTML = '';
 
@@ -1106,7 +1220,7 @@
       // ── Preview Actions ─────────────────────────────────────────
 
       document.getElementById('grid-clear-btn').addEventListener('click', () => {
-        artGrid.innerHTML = '';
+        artGrid.querySelectorAll('.card-group').forEach(g => g.remove());
         clearPreview();
         setPaneStatus(scryfallStatus, 'Toggle Scryfall above to search');
         setPaneStatus(mpcStatus,      'Toggle MPC Fill above to search');
@@ -1137,7 +1251,13 @@
         const item   = state.previewItem;
         const cardEl = state.previewCardEl;
         state.sheet.push(item);
+        const parentGroup = cardEl?.closest('.card-group');
         cardEl?.remove();
+        if (parentGroup) {
+          const grid = parentGroup.querySelector('.card-group-grid');
+          if (grid && grid.children.length === 0) parentGroup.remove();
+          else if (grid) updateGroupCount(parentGroup);
+        }
         clearPreview();
         renderSheet();
         saveImageLocally(item);
